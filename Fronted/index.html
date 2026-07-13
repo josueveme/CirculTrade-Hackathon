@@ -1,1 +1,671 @@
 
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CirculTrade — Escrow para el reúso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<style>
+  :root{
+    --paper:#EAE6D8;
+    --paper-2:#DDD7C3;
+    --ink:#171F1B;
+    --ink-soft:#171F1Bb3;
+    --moss:#2C4536;
+    --moss-2:#3D6250;
+    --clay:#A85C3E;
+    --thread:#1B9A93;
+    --gold:#BE9A2C;
+    --line:#171F1B22;
+    --card:#F3F0E5;
+    --danger:#A6402F;
+    --radius:16px;
+    --frame-w:390px;
+  }
+
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:#0F1512;
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    padding:24px 12px;
+  }
+  ::selection{background:var(--thread);color:var(--paper);}
+  h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0;letter-spacing:-0.01em;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;text-decoration:none;}
+
+  /* ================= PHONE FRAME (16:9-oriented mobile viewport) ================= */
+  .device{
+    position:relative;
+    width:var(--frame-w);
+    aspect-ratio:9/16;
+    max-height:calc(100vh - 48px);
+    background:#111;
+    border-radius:38px;
+    padding:12px;
+    box-shadow:0 30px 60px -20px #000000aa, 0 0 0 1px #ffffff10 inset;
+  }
+  .screen{
+    position:relative;
+    width:100%;
+    height:100%;
+    background:var(--paper);
+    border-radius:26px;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  .notch{
+    position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:120px;height:22px;background:#111;
+    border-bottom-left-radius:14px;border-bottom-right-radius:14px;
+    z-index:50;
+  }
+
+  /* ================= TOP BAR ================= */
+  .topbar{
+    padding:26px 16px 12px;
+    display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--line);
+    background:var(--paper);
+    flex-shrink:0;
+  }
+  .brand{display:flex;align-items:center;gap:8px;}
+  .brand svg{width:22px;height:22px;}
+  .brand span{font-family:'Fraunces',serif;font-weight:600;font-size:15.5px;}
+  .net-status{display:flex;align-items:center;gap:6px;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--danger);flex-shrink:0;}
+  .dot.on{background:var(--moss-2);}
+  #netLabel{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink-soft);}
+
+  .btn{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:13px;
+    padding:9px 14px;
+    border-radius:100px;
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:var(--paper);
+    cursor:pointer;
+  }
+  .btn.ghost{background:transparent;color:var(--ink);}
+  .btn.small{padding:7px 12px;font-size:11.5px;}
+  .btn.block{width:100%;}
+  .btn:disabled{opacity:.45;}
+  .btn.thread{border-color:var(--thread);background:var(--thread);}
+  .btn.clay{border-color:var(--clay);background:var(--clay);}
+
+  /* ================= SCROLL AREA / PANELS ================= */
+  .panels{flex:1;overflow:hidden;position:relative;}
+  .panel{
+    position:absolute;inset:0;
+    overflow-y:auto;
+    padding:18px 16px 24px;
+    -webkit-overflow-scrolling:touch;
+    display:none;
+  }
+  .panel.active{display:block;}
+  .panel::-webkit-scrollbar{width:0;}
+
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--moss-2);
+    display:flex;align-items:center;gap:8px;margin-bottom:10px;
+  }
+  .eyebrow::before{content:"";width:16px;height:1px;background:var(--moss-2);}
+
+  h1.title{font-size:25px;line-height:1.12;}
+  h1.title em{font-style:italic;color:var(--clay);}
+  .lede{font-size:13.5px;color:var(--ink-soft);margin-top:12px;}
+
+  .loop-figure{margin:20px 0 6px;}
+  .loop-cap{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink-soft);text-align:center;margin-top:6px;}
+
+  .block-title{font-size:15px;margin:22px 0 4px;}
+  .block-sub{font-size:12px;color:var(--ink-soft);margin:0 0 12px;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;}
+  .field{margin-bottom:13px;}
+  label{display:block;font-size:11px;font-weight:600;margin-bottom:5px;}
+  input, textarea, select{
+    width:100%;
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    padding:10px 11px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:#fff;
+    color:var(--ink);
+  }
+  input:focus, textarea:focus, select:focus{outline:2px solid var(--thread);outline-offset:1px;}
+  .hint{font-size:10.5px;color:var(--ink-soft);margin-top:5px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  /* ================= ESCROW CARDS ================= */
+  #escrowGrid{display:flex;flex-direction:column;gap:12px;}
+  .escrow-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:10px;}
+  .escrow-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .escrow-addr{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-soft);}
+  .state-pill{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 9px;border-radius:100px;white-space:nowrap;}
+  .state-0{background:#E4E0D0;color:var(--ink);}
+  .state-1{background:#DCEAE3;color:var(--moss);}
+  .state-2{background:#D9EDEC;color:var(--thread);}
+  .state-3{background:#DDEFD8;color:#2F6B33;}
+  .state-4{background:#F3DCD2;color:var(--danger);}
+  .state-5{background:#EDE3D2;color:var(--gold);}
+  .escrow-desc{font-size:13px;font-weight:600;}
+  .escrow-meta{font-size:10.8px;color:var(--ink-soft);display:flex;flex-direction:column;gap:2px;}
+  .role-tags{display:flex;gap:5px;flex-wrap:wrap;}
+  .role-tag{font-size:9.5px;font-family:'JetBrains Mono',monospace;border:1px solid var(--line);border-radius:100px;padding:2px 7px;}
+  .escrow-actions{display:flex;flex-wrap:wrap;gap:6px;}
+  .dispute-box{display:flex;gap:6px;}
+  .dispute-box input{flex:1;}
+  .empty{text-align:center;padding:30px 14px;color:var(--ink-soft);font-size:12.5px;border:1px dashed var(--line);border-radius:var(--radius);}
+
+  .trust-result{margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:12.5px;}
+  .trust-result strong{font-size:24px;font-family:'Fraunces',serif;color:var(--moss);}
+
+  /* ================= BOTTOM TAB BAR ================= */
+  .tabbar{
+    flex-shrink:0;
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    border-top:1px solid var(--line);
+    background:var(--paper);
+    padding:8px 6px calc(14px + env(safe-area-inset-bottom,0px));
+  }
+  .tab{
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:none;color:var(--ink-soft);
+    font-family:'Inter',sans-serif;font-size:9.5px;font-weight:600;
+    padding:6px 2px;border-radius:10px;cursor:pointer;
+  }
+  .tab svg{width:19px;height:19px;}
+  .tab.active{color:var(--moss);background:var(--paper-2);}
+
+  /* ================= TOASTS ================= */
+  #toasts{position:absolute;left:12px;right:12px;bottom:78px;z-index:200;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+  .toast{background:var(--ink);color:var(--paper);padding:11px 14px;border-radius:10px;font-size:11.5px;box-shadow:0 8px 20px #00000040;animation:slidein .2s ease;}
+  .toast.err{background:var(--danger);}
+  .toast.ok{background:var(--moss);}
+  @keyframes slidein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+  .frame-caption{
+    color:#ffffff70;font-family:'JetBrains Mono',monospace;font-size:10.5px;
+    text-align:center;margin-top:14px;
+  }
+  .stack-wrap{display:flex;flex-direction:column;align-items:center;}
+
+  @media (max-width:430px){
+    body{padding:0;}
+    .device{width:100vw;aspect-ratio:auto;height:100vh;max-height:none;border-radius:0;padding:0;box-shadow:none;}
+    .screen{border-radius:0;}
+    .frame-caption{display:none;}
+  }
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+
+<div class="stack-wrap">
+<div class="device">
+  <div class="notch"></div>
+  <div class="screen">
+
+    <div class="topbar">
+      <div class="brand">
+        <svg viewBox="0 0 40 40" fill="none">
+          <path d="M20 4C11.16 4 4 11.16 4 20" stroke="#2C4536" stroke-width="3.2" stroke-linecap="round"/>
+          <path d="M20 36C28.84 36 36 28.84 36 20" stroke="#A85C3E" stroke-width="3.2" stroke-linecap="round"/>
+          <path d="M4 20c0 8.84 7.16 16 16 16" stroke="#1B9A93" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="1 6" stroke-linejoin="round"/>
+          <circle cx="20" cy="4" r="3" fill="#2C4536"/>
+          <circle cx="36" cy="20" r="3" fill="#A85C3E"/>
+          <circle cx="20" cy="36" r="3" fill="#1B9A93"/>
+        </svg>
+        <span>CirculTrade</span>
+      </div>
+      <button class="btn small" id="connectBtn">Conectar</button>
+    </div>
+
+    <div class="panels">
+
+      <!-- ============ TAB: INICIO ============ -->
+      <div class="panel active" id="panel-inicio">
+        <div class="net-status" style="margin-bottom:14px;">
+          <span class="dot" id="netDot"></span><span id="netLabel">sin conexión</span>
+        </div>
+
+        <div class="eyebrow">Escrow · LACNet EVM</div>
+        <h1 class="title">Vender de segunda<br>mano <em>sin apostar</em><br>a la palabra del otro.</h1>
+        <p class="lede">CirculTrade bloquea el pago del comprador en un contrato inteligente y solo lo libera cuando el ítem llega tal como se describió.</p>
+
+        <div class="loop-figure">
+          <svg viewBox="0 0 300 300" style="width:100%;">
+            <defs><path id="loopPath" d="M150 30 A120 120 0 1 1 149.9 30" fill="none"/></defs>
+            <circle cx="150" cy="150" r="120" fill="none" stroke="#171F1B14" stroke-width="1"/>
+            <path d="M150 30 A120 120 0 0 1 253.9 210" fill="none" stroke="#2C4536" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M253.9 210 A120 120 0 0 1 46.1 210" fill="none" stroke="#A85C3E" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M46.1 210 A120 120 0 0 1 150 30" fill="none" stroke="#1B9A93" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="2 7"/>
+            <g><circle cx="150" cy="30" r="22" fill="#F3F0E5" stroke="#2C4536" stroke-width="2"/><text x="150" y="34" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#171F1B">BUYER</text></g>
+            <g><circle cx="253.9" cy="210" r="22" fill="#F3F0E5" stroke="#A85C3E" stroke-width="2"/><text x="253.9" y="214" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#171F1B">SELLER</text></g>
+            <g><circle cx="46.1" cy="210" r="22" fill="#F3F0E5" stroke="#1B9A93" stroke-width="2"/><text x="46.1" y="207" text-anchor="middle" font-family="JetBrains Mono" font-size="7.8" fill="#171F1B">ESCROW</text><text x="46.1" y="217" text-anchor="middle" font-family="JetBrains Mono" font-size="7.8" fill="#171F1B">CONTRACT</text></g>
+            <circle r="4" fill="#BE9A2C"><animateMotion dur="6s" repeatCount="indefinite" rotate="auto"><mpath href="#loopPath"/></animateMotion></circle>
+          </svg>
+          <div class="loop-cap">fondos → envío → confirmación → reúso</div>
+        </div>
+
+        <h2 class="block-title">Conectar contrato factory</h2>
+        <p class="block-sub">Pega la dirección del <span class="mono">CirculTradeFactory</span> desplegado.</p>
+        <div class="card">
+          <div class="field">
+            <label for="factoryAddr">Dirección del Factory</label>
+            <input id="factoryAddr" placeholder="0x..." class="mono" />
+          </div>
+          <button class="btn thread block" id="loadFactoryBtn">Cargar y sincronizar</button>
+          <p class="hint" id="factoryStatus">Aún no se ha cargado ningún contrato.</p>
+        </div>
+      </div>
+
+      <!-- ============ TAB: CREAR ============ -->
+      <div class="panel" id="panel-crear">
+        <div class="eyebrow">Nuevo depósito</div>
+        <h2 class="block-title" style="margin-top:0;">Registrar transacción</h2>
+        <p class="block-sub">Quien firma queda como <strong>comprador</strong>. El pago aún no sale de tu wallet.</p>
+
+        <div class="card">
+          <div class="field">
+            <label for="sellerInput">Dirección del vendedor</label>
+            <input id="sellerInput" placeholder="0x..." class="mono" />
+          </div>
+          <div class="field">
+            <label for="arbiterInput">Dirección del árbitro / oráculo</label>
+            <input id="arbiterInput" placeholder="0x..." class="mono" />
+          </div>
+          <div class="field">
+            <label for="itemInput">Descripción del ítem</label>
+            <textarea id="itemInput" rows="2" placeholder="Ej. Calculadora científica, poco uso" style="font-family:'Inter',sans-serif;"></textarea>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label for="priceInput">Precio (ETH)</label>
+              <input id="priceInput" type="number" step="0.0001" min="0" placeholder="0.05" />
+            </div>
+            <div class="field">
+              <label for="windowInput">Ventana</label>
+              <select id="windowInput">
+                <option value="600">10 min (demo)</option>
+                <option value="3600">1 hora</option>
+                <option value="86400" selected>1 día</option>
+                <option value="259200">3 días</option>
+                <option value="604800">7 días</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint">Si el comprador no confirma ni disputa a tiempo, el vendedor puede reclamar los fondos.</p>
+          <button class="btn thread block" id="createEscrowBtn" style="margin-top:8px;">Crear depósito</button>
+        </div>
+      </div>
+
+      <!-- ============ TAB: DEPÓSITOS ============ -->
+      <div class="panel" id="panel-depositos">
+        <div class="eyebrow">Seguimiento</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <h2 class="block-title" style="margin-top:0;">Depósitos</h2>
+          <button class="btn ghost small" id="refreshBtn">Actualizar</button>
+        </div>
+        <p class="block-sub">Estado on-chain en tiempo real; las acciones dependen de tu rol.</p>
+        <div id="escrowGrid">
+          <div class="empty">Conecta tu wallet y carga un factory para ver los depósitos.</div>
+        </div>
+      </div>
+
+      <!-- ============ TAB: CONFIANZA ============ -->
+      <div class="panel" id="panel-confianza">
+        <div class="eyebrow">Reputación</div>
+        <h2 class="block-title" style="margin-top:0;">Trust Score</h2>
+        <p class="block-sub">Transacciones completadas menos disputas perdidas como vendedor.</p>
+        <div class="card">
+          <div class="field">
+            <label for="trustAddr">Dirección a consultar</label>
+            <input id="trustAddr" placeholder="0x..." class="mono" />
+          </div>
+          <button class="btn block" id="checkTrustBtn">Consultar</button>
+          <div class="trust-result" id="trustResult"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="toasts"></div>
+
+    <div class="tabbar">
+      <button class="tab active" data-tab="inicio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1v-9"/></svg>
+        Inicio
+      </button>
+      <button class="tab" data-tab="crear">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+        Crear
+      </button>
+      <button class="tab" data-tab="depositos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        Depósitos
+      </button>
+      <button class="tab" data-tab="confianza">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>
+        Confianza
+      </button>
+    </div>
+
+  </div>
+</div>
+<p class="frame-caption">vista previa · formato móvil 9:16</p>
+</div>
+
+<script>
+/* ============================================================
+   ABIs — reflejan exactamente CirculTradeEscrow.sol
+   ============================================================ */
+const FACTORY_ABI = [
+  "function createEscrow(address _seller, address _arbiter, uint256 _price, string _itemDescription, uint256 _confirmationWindow) returns (address)",
+  "function totalEscrows() view returns (uint256)",
+  "function escrows(uint256) view returns (address escrowAddress, address buyer, address seller, address arbiter, uint256 price, uint256 createdAt)",
+  "function trustScore(address user) view returns (int256)",
+  "event EscrowCreated(address indexed escrowAddress, address indexed buyer, address indexed seller, address arbiter, uint256 price)"
+];
+
+const ESCROW_ABI = [
+  "function state() view returns (uint8)",
+  "function buyer() view returns (address)",
+  "function seller() view returns (address)",
+  "function arbiter() view returns (address)",
+  "function price() view returns (uint256)",
+  "function itemDescription() view returns (string)",
+  "function confirmationWindow() view returns (uint256)",
+  "function shippedAt() view returns (uint256)",
+  "function fund() payable",
+  "function markShipped()",
+  "function confirmReceipt()",
+  "function openDispute(string reason)",
+  "function resolveDispute(bool releaseToSeller)",
+  "function claimAfterTimeout()"
+];
+
+const STATE_LABELS = ["Creado","Fondeado","Enviado","Completado","En disputa","Reembolsado"];
+
+let provider, signer, userAddress, factory, factoryAddress = "";
+
+const $ = (id) => document.getElementById(id);
+
+/* ---------------- tabs ---------------- */
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    $("panel-"+btn.dataset.tab).classList.add("active");
+  });
+});
+
+/* ---------------- toasts ---------------- */
+function toast(msg, kind=""){
+  const el = document.createElement("div");
+  el.className = "toast" + (kind ? " "+kind : "");
+  el.textContent = msg;
+  $("toasts").appendChild(el);
+  setTimeout(()=>el.remove(), 4800);
+}
+
+function short(addr){ return addr ? addr.slice(0,6) + "…" + addr.slice(-4) : ""; }
+
+/* ---------------- wallet connect ---------------- */
+async function connectWallet(){
+  if(!window.ethereum){
+    toast("No se detectó una wallet compatible.", "err");
+    return;
+  }
+  try{
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    signer = await provider.getSigner();
+    userAddress = await signer.getAddress();
+
+    const network = await provider.getNetwork();
+    $("netLabel").textContent = (network.name !== "unknown" ? network.name : "chainId " + network.chainId);
+    $("netDot").classList.add("on");
+    $("connectBtn").textContent = short(userAddress);
+    $("connectBtn").disabled = true;
+
+    toast("Wallet conectada: " + short(userAddress), "ok");
+    if(factoryAddress) await refreshEscrows();
+
+    window.ethereum.on("accountsChanged", () => window.location.reload());
+    window.ethereum.on("chainChanged", () => window.location.reload());
+  }catch(err){
+    console.error(err);
+    toast("No se pudo conectar la wallet.", "err");
+  }
+}
+
+/* ---------------- factory ---------------- */
+async function loadFactory(){
+  const addr = $("factoryAddr").value.trim();
+  if(!ethers.isAddress(addr)){
+    $("factoryStatus").textContent = "Dirección inválida.";
+    return;
+  }
+  if(!provider) provider = new ethers.BrowserProvider(window.ethereum || {});
+  factoryAddress = addr;
+  factory = new ethers.Contract(addr, FACTORY_ABI, signer || provider);
+  $("factoryStatus").textContent = "Factory cargado: " + short(addr);
+  toast("Factory sincronizado.", "ok");
+  await refreshEscrows();
+}
+
+/* ---------------- create escrow ---------------- */
+async function createEscrow(){
+  if(!signer) return toast("Conecta tu wallet primero.", "err");
+  if(!factory) return toast("Carga un contrato factory primero.", "err");
+
+  const seller = $("sellerInput").value.trim();
+  const arbiter = $("arbiterInput").value.trim();
+  const item = $("itemInput").value.trim();
+  const priceEth = $("priceInput").value.trim();
+  const windowSecs = $("windowInput").value;
+
+  if(!ethers.isAddress(seller) || !ethers.isAddress(arbiter)) return toast("Revisa las direcciones.", "err");
+  if(!priceEth || Number(priceEth) <= 0) return toast("Ingresa un precio válido.", "err");
+  if(!item) return toast("Describe el ítem.", "err");
+
+  try{
+    const priceWei = ethers.parseEther(priceEth);
+    const factoryWithSigner = factory.connect(signer);
+    toast("Enviando transacción…");
+    const tx = await factoryWithSigner.createEscrow(seller, arbiter, priceWei, item, windowSecs);
+    await tx.wait();
+    toast("Depósito creado.", "ok");
+    $("itemInput").value = ""; $("priceInput").value = "";
+    await refreshEscrows();
+    document.querySelector('[data-tab="depositos"]').click();
+  }catch(err){
+    console.error(err);
+    toast(parseErr(err), "err");
+  }
+}
+
+/* ---------------- read + render escrows ---------------- */
+async function refreshEscrows(){
+  if(!factory) return;
+  const grid = $("escrowGrid");
+  grid.innerHTML = "<div class='empty'>Cargando depósitos…</div>";
+
+  try{
+    const total = Number(await factory.totalEscrows());
+    if(total === 0){
+      grid.innerHTML = "<div class='empty'>Todavía no se ha creado ningún depósito.</div>";
+      return;
+    }
+    const readProvider = signer || provider;
+    const cards = [];
+
+    for(let i = total - 1; i >= 0; i--){
+      const record = await factory.escrows(i);
+      const escrow = new ethers.Contract(record.escrowAddress, ESCROW_ABI, readProvider);
+      const [state, itemDescription, confirmationWindow, shippedAt] = await Promise.all([
+        escrow.state(), escrow.itemDescription(), escrow.confirmationWindow(), escrow.shippedAt()
+      ]);
+      cards.push(renderCard({
+        address: record.escrowAddress, buyer: record.buyer, seller: record.seller, arbiter: record.arbiter,
+        price: record.price, itemDescription, state: Number(state),
+        confirmationWindow: Number(confirmationWindow), shippedAt: Number(shippedAt)
+      }));
+    }
+    grid.innerHTML = "";
+    cards.forEach(c => grid.appendChild(c));
+  }catch(err){
+    console.error(err);
+    grid.innerHTML = "<div class='empty'>No se pudieron leer los depósitos. Verifica factory y red.</div>";
+  }
+}
+
+function renderCard(e){
+  const el = document.createElement("div");
+  el.className = "escrow-card";
+
+  const isBuyer = userAddress && userAddress.toLowerCase() === e.buyer.toLowerCase();
+  const isSeller = userAddress && userAddress.toLowerCase() === e.seller.toLowerCase();
+  const isArbiter = userAddress && userAddress.toLowerCase() === e.arbiter.toLowerCase();
+
+  const deadline = e.shippedAt > 0 ? e.shippedAt + e.confirmationWindow : null;
+  const timedOut = deadline ? (Math.floor(Date.now()/1000) > deadline) : false;
+
+  let roleTags = "";
+  if(isBuyer) roleTags += "<span class='role-tag'>tú: comprador</span>";
+  if(isSeller) roleTags += "<span class='role-tag'>tú: vendedor</span>";
+  if(isArbiter) roleTags += "<span class='role-tag'>tú: árbitro</span>";
+  if(!isBuyer && !isSeller && !isArbiter) roleTags += "<span class='role-tag'>observador</span>";
+
+  el.innerHTML = `
+    <div class="escrow-top">
+      <div class="escrow-addr">${short(e.address)}</div>
+      <span class="state-pill state-${e.state}">${STATE_LABELS[e.state]}</span>
+    </div>
+    <div class="escrow-desc">${escapeHtml(e.itemDescription)}</div>
+    <div class="escrow-meta">
+      <span>Precio: ${ethers.formatEther(e.price)} ETH</span>
+      <span>Comprador: ${short(e.buyer)} · Vendedor: ${short(e.seller)}</span>
+      <span>Árbitro: ${short(e.arbiter)}</span>
+      ${deadline ? `<span>Límite: ${new Date(deadline*1000).toLocaleString()}</span>` : ""}
+    </div>
+    <div class="role-tags">${roleTags}</div>
+    <div class="escrow-actions" data-actions></div>
+    <div class="dispute-box" data-dispute style="display:none;">
+      <input type="text" placeholder="Motivo de la disputa" data-reason />
+      <button class="btn clay small" data-open-dispute>Disputar</button>
+    </div>
+  `;
+
+  const actions = el.querySelector("[data-actions]");
+  function addBtn(label, cls, handler){
+    const b = document.createElement("button");
+    b.className = "btn small " + cls;
+    b.textContent = label;
+    b.onclick = handler;
+    actions.appendChild(b);
+  }
+
+  if(e.state === 0 && isBuyer) addBtn("Fondear " + ethers.formatEther(e.price) + " ETH", "thread", () => fundEscrow(e.address, e.price));
+  if(e.state === 1 && isSeller) addBtn("Marcar enviado", "thread", () => callEscrow(e.address, "markShipped"));
+  if(e.state === 2){
+    if(isBuyer) addBtn("Confirmar recepción", "thread", () => callEscrow(e.address, "confirmReceipt"));
+    if(isBuyer || isSeller){
+      el.querySelector("[data-dispute]").style.display = "flex";
+      el.querySelector("[data-open-dispute]").onclick = () => {
+        const reason = el.querySelector("[data-reason]").value.trim() || "Sin motivo especificado";
+        callEscrow(e.address, "openDispute", [reason]);
+      };
+    }
+    if(isSeller && timedOut) addBtn("Reclamar vencido", "clay", () => callEscrow(e.address, "claimAfterTimeout"));
+  }
+  if(e.state === 4 && isArbiter){
+    addBtn("Liberar a vendedor", "thread", () => callEscrow(e.address, "resolveDispute", [true]));
+    addBtn("Reembolsar comprador", "clay", () => callEscrow(e.address, "resolveDispute", [false]));
+  }
+  if(actions.children.length === 0 && el.querySelector("[data-dispute]").style.display !== "flex"){
+    actions.innerHTML = "<span class='hint'>Sin acciones para tu rol en este estado.</span>";
+  }
+  return el;
+}
+
+function escapeHtml(str){
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+async function fundEscrow(address, price){
+  if(!signer) return toast("Conecta tu wallet primero.", "err");
+  try{
+    const escrow = new ethers.Contract(address, ESCROW_ABI, signer);
+    toast("Enviando pago…");
+    const tx = await escrow.fund({ value: price });
+    await tx.wait();
+    toast("Depósito fondeado.", "ok");
+    await refreshEscrows();
+  }catch(err){ console.error(err); toast(parseErr(err), "err"); }
+}
+
+async function callEscrow(address, method, args=[]){
+  if(!signer) return toast("Conecta tu wallet primero.", "err");
+  try{
+    const escrow = new ethers.Contract(address, ESCROW_ABI, signer);
+    toast("Confirmando transacción…");
+    const tx = await escrow[method](...args);
+    await tx.wait();
+    toast("Transacción confirmada.", "ok");
+    await refreshEscrows();
+  }catch(err){ console.error(err); toast(parseErr(err), "err"); }
+}
+
+function parseErr(err){
+  const raw = err?.shortMessage || err?.reason || err?.message || "La transacción falló.";
+  return raw.length > 110 ? raw.slice(0,110) + "…" : raw;
+}
+
+/* ---------------- trust score ---------------- */
+async function checkTrust(){
+  if(!factory) return toast("Carga un contrato factory primero.", "err");
+  const addr = $("trustAddr").value.trim();
+  if(!ethers.isAddress(addr)) return toast("Dirección inválida.", "err");
+  try{
+    const score = await factory.trustScore(addr);
+    $("trustResult").innerHTML = `Trust Score de ${short(addr)}: <strong>${score.toString()}</strong>`;
+  }catch(err){ console.error(err); toast("No se pudo leer el Trust Score.", "err"); }
+}
+
+/* ---------------- wire up ---------------- */
+$("connectBtn").addEventListener("click", connectWallet);
+$("loadFactoryBtn").addEventListener("click", loadFactory);
+$("createEscrowBtn").addEventListener("click", createEscrow);
+$("refreshBtn").addEventListener("click", refreshEscrows);
+$("checkTrustBtn").addEventListener("click", checkTrust);
+</script>
+</body>
+</html>
+
